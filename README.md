@@ -1,108 +1,81 @@
-# CarND-Controls-MPC
-Self-Driving Car Engineer Nanodegree Program
+# CarND-Control-MPC
+
+This repository contains all the code needed to complete the MPC project for Udacity's Self-Driving Car Nanodegree.
 
 ---
+## Submission
+Files modified
+- MPC.cpp
+- MPC.h
+- main.cpp
+---
 
-## Dependencies
+# Writeup
 
-* cmake >= 3.5
- * All OSes: [click here for installation instructions](https://cmake.org/install/)
-* make >= 4.1(mac, linux), 3.81(Windows)
-  * Linux: make is installed by default on most Linux distros
-  * Mac: [install Xcode command line tools to get make](https://developer.apple.com/xcode/features/)
-  * Windows: [Click here for installation instructions](http://gnuwin32.sourceforge.net/packages/make.htm)
-* gcc/g++ >= 5.4
-  * Linux: gcc / g++ is installed by default on most Linux distros
-  * Mac: same deal as make - [install Xcode command line tools]((https://developer.apple.com/xcode/features/)
-  * Windows: recommend using [MinGW](http://www.mingw.org/)
-* [uWebSockets](https://github.com/uWebSockets/uWebSockets)
-  * Run either `install-mac.sh` or `install-ubuntu.sh`.
-  * If you install from source, checkout to commit `e94b6e1`, i.e.
-    ```
-    git clone https://github.com/uWebSockets/uWebSockets
-    cd uWebSockets
-    git checkout e94b6e1
-    ```
-    Some function signatures have changed in v0.14.x. See [this PR](https://github.com/udacity/CarND-MPC-Project/pull/3) for more details.
+## Model
 
-* **Ipopt and CppAD:** Please refer to [this document](https://github.com/udacity/CarND-MPC-Project/blob/master/install_Ipopt_CppAD.md) for installation instructions.
-* [Eigen](http://eigen.tuxfamily.org/index.php?title=Main_Page). This is already part of the repo so you shouldn't have to worry about it.
-* Simulator. You can download these from the [releases tab](https://github.com/udacity/self-driving-car-sim/releases).
-* Not a dependency but read the [DATA.md](./DATA.md) for a description of the data sent back from the simulator.
+This project implements the Model Predictive Control (MPC) to safely drive an autonomous car around the track.
 
+### State Vector
+The state of the car at any given time is modelled by the six variables below:
+* `x`: x coordinate of the vehicle.
+* `y`: y coordinate of the vehicle.
+* `psi`: yaw angle of the vehicle.
+* `v`: velocity of the vehicle.
+* `cte`: cross track error at this moment.
+* `epsi`: orientation error
 
-## Basic Build Instructions
+### Actuators
+The state of the car can be changed by changing the steering angle, pressing gas or braking. These are captured in the actuator actions:
+* `delta`: steering wheel angle. This is restricted to (-25,25) degrees.
+* `a`: throttle. This is restricted to (-1,1)
 
-1. Clone this repo.
-2. Make a build directory: `mkdir build && cd build`
-3. Compile: `cmake .. && make`
-4. Run it: `./mpc`.
+### Update equations
+The MPC model prescribes the following equations for updates to the vehicle's state
+* `x = x + v * cos(psi) * dt`
+* `y = y + v * sin(psi) * dt`
+* `psi = psi + v / Lf * delta * dt`
+* `v = v + a * dt`
+* `cte = cte + v * sin(epsi) * dt =  f(x) - y + v * sin(epsi) * dt`
+* `epsi = epsi + v / Lf * delta * dt = psi - psi_des + v / Lf * delta * dt`
 
-## Tips
+In the above equations, `psi_des` is the desired `psi` or yaw angle.
 
-1. It's recommended to test the MPC on basic examples to see if your implementation behaves as desired. One possible example
-is the vehicle starting offset of a straight line (reference). If the MPC implementation is correct, after some number of timesteps
-(not too many) it should find and track the reference line.
-2. The `lake_track_waypoints.csv` file has the waypoints of the lake track. You could use this to fit polynomials and points and see of how well your model tracks curve. NOTE: This file might be not completely in sync with the simulator so your solution should NOT depend on it.
-3. For visualization this C++ [matplotlib wrapper](https://github.com/lava/matplotlib-cpp) could be helpful.)
-4.  Tips for setting up your environment are available [here](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/0949fca6-b379-42af-a919-ee50aa304e6a/lessons/f758c44c-5e40-4e01-93b5-1a82aa4e044f/concepts/23d376c7-0195-4276-bdf0-e02f1f3c665d)
-5. **VM Latency:** Some students have reported differences in behavior using VM's ostensibly a result of latency.  Please let us know if issues arise as a result of a VM environment.
+### Other constants
+* `Lf`: Length from front of vehicle to the centre of gravity.
 
-## Editor Settings
+## Timestamp length and duration
 
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
+`T` is the duration for which the trajectory will be predicted. This value needs to finely tuned.
 
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
+In the lectures, T was recommended to be of the order of a few seconds.
 
-## Code Style
+`T` is set by tuning the timestamp length `dt` and number of discretization `N`.
 
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
+`T = N*dt` where,
+* `N` is the number of discretizations. A large value will be computationally taxing and a low value will result in low accuracy.
+* `dt` is the discretization of `T`.
 
-## Project Instructions and Rubric
+### Chosen values
+For the submission, I chose `N` = 10 and `dt` = 0.1.
+I tried larger values of `N` and `dt`. This typically resulted in the trajectory exceeding the horizon and causing errors. While the car did stay on track for the most part, it would drive off the track on some sharp turns. Also, this is computationally more intensive.
 
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
+For smaller values of `N` and `dt`, the accuracy was much lower. The car would almost always drive off the center of the road and eventually start driving outside driveable area.
 
-More information is only accessible by people who are already enrolled in Term 2
-of CarND. If you are enrolled, see [the project page](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/f1820894-8322-4bb3-81aa-b26b3c6dcbaf/lessons/b1ff3be0-c904-438e-aad3-2b5379f0e0c3/concepts/1a2255a0-e23c-44cf-8d41-39b8a3c8264a)
-for instructions and the project rubric.
+## Polynomial fitting and MPC preprocessing
+Polynomial was fit using the provided `polyfit` function.
 
-## Hints!
+Preprocessing was done for `x, y` and `psi` prior to the MPC procedure. They were all set to zero.
 
-* You don't have to follow this directory structure, but if you do, your work
-  will span all of the .cpp files here. Keep an eye out for TODOs.
+* This helps transform the global coordinates of the waypoints into the view of the vehicle.
+* Preprocessing should also simplify the numerical calculation for `cte` and `psi`.
 
-## Call for IDE Profiles Pull Requests
+## MPC with latency
+In a real-world scenario, there is a gap between applying actuation and it actually taking effect. A value of 100 ms is considered reasonable in the industry. Control models need to account for this latency.
 
-Help your fellow students!
+`MPC` is particularly suited to handling latency since it can be part of the model itself.
 
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to we ensure
-that students don't feel pressured to use one IDE or another.
-
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
-
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
-
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
-
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
-
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
+To account for latency in my implementation:
+* A 100 ms lag was introduced between changes to actuators and recalculation of state vector.
+* The coordinates of waypoints would be changed as per this new state after 100 ms.
+* Other variables, like `cte`, `epsi` and `coeffs` would also be based off state after the 100 ms delay.
