@@ -4,6 +4,7 @@
 #include <iostream>
 #include <thread>
 #include <vector>
+#include <cppad/cppad.hpp>
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "MPC.h"
@@ -65,6 +66,12 @@ Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
   return result;
 }
 
+double check_bounds(double var, double upper, double lower) {
+  if (var > upper) var = upper;
+  if (var < lower) var = lower;
+  return var;
+}
+
 int main() {
   uWS::Hub h;
 
@@ -92,14 +99,49 @@ int main() {
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
 
+          double t_lat = 0.1;
+          double Lf = 2.67;
+
+          double delta = j[1]["steering_angle"];
+          double throttle = j[1]["throttle"];
+
+          // state after 100 ms
+          double x_lat = px +  v * CppAD::cos(psi) * t_lat;
+          double y_lat = py + v * CppAD::sin(psi) * t_lat;
+          double psi_lat = psi - v * delta / Lf * t_lat;
+          double v_lat = v + throttle * t_lat;
+
+          for (unsigned int i = 0; i < ptsx.size(); ++i)
+          {
+            double shift_x = ptsx[i] - x_lat;
+            double shift_y = ptsy[i] - y_lat;
+
+            ptsx[i] = (shift_x * cos(-psi_lat) - shift_y * sin(-psi_lat));
+            ptsy[i] = (shift_x * sin(-psi_lat) + shift_y * cos(-psi_lat));
+          }
+
           /*
           * TODO: Calculate steering angle and throttle using MPC.
           *
           * Both are in between [-1, 1].
           *
           */
-          double steer_value;
-          double throttle_value;
+          Eigen::Map<Eigen::VectorXd> eigen_ptsx(&ptsx[0], 6);
+          Eigen::Map<Eigen::VectorXd> eigen_ptsy(&ptsy[0], 6);
+          Eigen::VectorXd coeffs = polyfit(eigen_ptsx, eigen_ptsy, 3);
+
+          double epsi_lat = -atan(coeffs[1]);
+          double cte_lat = polyeval(coeffs, 0.0);
+
+          double ref_v = abs(cte_lat) < 1 ? 100 : 50;
+
+          Eigen::VectorXd state_lat(6);
+          state_lat << 0.0, 0.0, 0.0, v_lat, cte_lat, epsi_lat;
+
+          auto vars = mpc.Solve(state_lat, coeffs, ref_v);
+
+          double steer_value = check_bounds(vars[0], 1.0, -1.0)/deg2rad(25)/Lf;
+          double throttle_value = check_bounds(vars[1], 1.0, -1.0);
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
@@ -111,6 +153,10 @@ int main() {
           vector<double> mpc_x_vals;
           vector<double> mpc_y_vals;
 
+          for (unsigned int i = 2; i < vars.size(); ++i)
+          {
+            (i % 2 == 0 ? mpc_x_vals : mpc_y_vals).push_back(vars[i]);
+          }
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
 
@@ -120,6 +166,14 @@ int main() {
           //Display the waypoints/reference line
           vector<double> next_x_vals;
           vector<double> next_y_vals;
+          double poly_inc = 2.5;
+          int num_points = 25;
+
+          for (int i = 0; i < num_points; ++i)
+          {
+            next_x_vals.push_back(poly_inc * i);
+            next_y_vals.push_back(polyeval(coeffs, poly_inc*i));
+          }
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
